@@ -79,7 +79,7 @@ def angular_distance(stroke_i: np.ndarray, stroke_j: np.ndarray) -> float:
     assert stroke_i.shape[1] == 3
     assert stroke_j.shape[1] == 3   
  
-    return (1 / np.sqrt((stroke_i - stroke_j)**2))
+    return (1 / np.linalg.norm(stroke_i - stroke_j))
 
 def angular_compatibility(stroke_i: np.ndarray, stroke_j: np.ndarray, aggregate_stroke: np.ndarray) -> float:
     """
@@ -101,7 +101,7 @@ def angular_compatibility(stroke_i: np.ndarray, stroke_j: np.ndarray, aggregate_
     assert stroke_j.shape[1] == 3   
     assert aggregate_stroke.shape[1] == 3   
 
-    phi = max(angular_distane(stroke_i, aggregate_stroke), angular_distance(stroke_j, aggregate_stroke))
+    phi = max(angular_distance(stroke_i, aggregate_stroke), angular_distance(stroke_j, aggregate_stroke))
     
     if phi < 8:
         return 1
