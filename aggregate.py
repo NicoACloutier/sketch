@@ -33,7 +33,7 @@ def buddy_point(buddy: tuple[int, int], stroke_i: np.ndarray, stroke_j: np.ndarr
     Returns:
         `np.ndarray`: the average point.
     """
-    return np.mean(np.array([stroke_i[buddy[0]], stroke_j[buddy[1]]), axis=0)
+    return np.mean(np.array([stroke_i[buddy[0]], stroke_j[buddy[1]]]), axis=0)
 
 def aggregate(stroke_i: np.ndarray, stroke_j: np.ndarray) -> np.ndarray:
     """
@@ -46,8 +46,8 @@ def aggregate(stroke_i: np.ndarray, stroke_j: np.ndarray) -> np.ndarray:
     """
     buddies = best_buddies(stroke_i, stroke_j)
     buddy_coords = np.array([buddy_point(buddy, stroke_i, stroke_j) for buddy in buddies])
-    i_max, i_min = max(buddies, key=(lambda x: x[0]))[0], min(buddies, key=(lambda x: x[0]))[0]
-    j_max, j_min = max(buddies, key=(lambda x: x[1]))[1], min(buddies, key=(lambda x: x[1]))[1]
-    stroke_i = np.concat(stroke_i[:i_min], stroke_i[i_max+1:]) 
-    stroke_j = np.concat(stroke_j[:j_min], stroke_j[j_max+1:])
-    return np.concatenate(stroke_i, buddy_coords, stroke_j) if i_min < j_min else np.concatenate(stroke_j, buddy_coords, stroke_i)
+    i_max, i_min = max(buddies, key=(lambda x: x[1]))[1], min(buddies, key=(lambda x: x[1]))[1]
+    j_max, j_min = max(buddies, key=(lambda x: x[0]))[0], min(buddies, key=(lambda x: x[0]))[0]
+    stroke_i = np.concat([stroke_i[:i_min], stroke_i[i_max+1:]])
+    stroke_j = np.concat([stroke_j[:j_min], stroke_j[j_max+1:]])
+    return np.concatenate([stroke_i, buddy_coords, stroke_j]) if i_min > j_min else np.concatenate([stroke_j, buddy_coords, stroke_i])
