@@ -4,24 +4,37 @@ import math
 SIGMA_I = 9/3.5
 SIGMA_J = 7/3.5
 
-def curve_map(point: np.ndarray, stroke: np.ndarray) -> np.ndarray:
+def unit_tangent(stroke: np.ndarray, point: np.ndarray, i: int) -> np.ndarray:
+    """
+    Find the unit tangent vector at a point on a stroke.
+    Arguments:
+        `stroke: np.ndarray`: the stroke the point is on.
+        `point: np.ndarray`: the point to find the unit tangent at.
+        `i: int`: the index of the point to find the tangent at.
+    Returns:
+        `np.ndarray`: unit tangent of same shape as `point`.
+    """
+    return np.array([0, 0, 0]) if i == 0 else (point-stroke[i-1])/point
+
+def curve_map(point: np.ndarray, stroke: np.ndarray) -> int:
     """
     Map a point `point` onto a curve ($M(p)$ in Liu et al. 2018).
     Arguments:
         `point: np.ndarray`: the point to map.
         `stroke: np.ndarray`: the curve to map it onto.
     Returns:
-        `np.ndarray`: point of same dimensions as `point` mapped onto curve.
+        `int`: index of point of same dimensions as `point` mapped onto curve.
     """
-    return stroke[np.argmin(np.linalg.norm(stroke - point, axis=1))]
+    return np.argmin(np.linalg.norm(stroke - point, axis=1))
 
-def angular_difference(point: np.ndarray, stroke_i: np.ndarray, aggregate_stroke: np.ndarray) -> float:
+def angular_difference(point: np.ndarray, stroke_i: np.ndarray, aggregate_stroke: np.ndarray, i: int) -> float:
     """
     Angular difference at point `p_prime` ($A_i$ in Liu et al. 2018).
     Arguments:
         `point: np.ndarray`: the 3D vector point to evaluate at.
         `stroke_i: np.ndarray`: the stroke to evaluate on.
         `aggregate_stroke: np.ndarray`: the aggregate stroke.
+        `i: int`: the index of the point in the stroke.
     Returns:
         `float`: angular difference score.
     """
@@ -33,9 +46,10 @@ def angular_difference(point: np.ndarray, stroke_i: np.ndarray, aggregate_stroke
     assert len(stroke_i.shape) == 2
     assert stroke_i.shape[1] == 3
 
-    mapped_point = curve_map(point, aggregate_stroke) # $p'$ in Liu et al.
-    t = unit_tangent(stroke_i, point)
-    t_prime = unit_tangent(aggregate_stroke, mapped_point)
+    mapped_i = curve_map(point, aggregate_stroke)
+    mapped_point = aggregate_curve[i] # $p'$ in Liu et al. 
+    t = unit_tangent(stroke_i, point, i)
+    t_prime = unit_tangent(aggregate_stroke, mapped_point, mapped_i)
 
     return np.arccos(t @ t_prime)
 
@@ -79,7 +93,7 @@ def angular_distance(stroke_i: np.ndarray, aggregate_stroke: np.ndarray) -> floa
     assert stroke_i.shape[1] == 3
     assert aggregate_stroke.shape[1] == 3   
 
-    return sum(angular_difference(point, stroke_i, aggregate_stroke) for point in stroke_i) / len(aggregate_stroke)
+    return sum(angular_difference(point, stroke_i, aggregate_stroke, i) for i, point in enumerate(stroke_i)) / len(aggregate_stroke)
 
 def angular_compatibility(stroke_i: np.ndarray, stroke_j: np.ndarray, aggregate_stroke: np.ndarray) -> float:
     """
