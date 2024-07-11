@@ -15,7 +15,7 @@ def main():
     trimesh.Scene(lines).show()
 
     ## curved line, perfect function 
-    s_i_two = np.array( [ [x/1000, (x/1000)**1.1, 0] for x in range(70) ] ) 
+    s_i_two = np.array( [ [x/1000, (x/1000)**1.05, 0] for x in range(70) ] ) 
     s_j_two = np.array( [ [x/1000, x/1000-.02, 0] for x in range(30, 100) ] ) 
     s_a_two = aggregate.aggregate(s_i_two, s_j_two)
     lines = [trimesh.load_path(line) for line in [s_i_two, s_j_two, s_a_two]]
