@@ -48,6 +48,9 @@ def aggregate(stroke_i: np.ndarray, stroke_j: np.ndarray) -> np.ndarray:
     buddy_coords = np.array([buddy_point(buddy, stroke_i, stroke_j) for buddy in buddies])
     i_max, i_min = max(buddies, key=(lambda x: x[1]))[1], min(buddies, key=(lambda x: x[1]))[1]
     j_max, j_min = max(buddies, key=(lambda x: x[0]))[0], min(buddies, key=(lambda x: x[0]))[0]
-    stroke_i = np.concat([stroke_i[:i_min], stroke_i[i_max+1:]])
-    stroke_j = np.concat([stroke_j[:j_min], stroke_j[j_max+1:]])
-    return np.concatenate([stroke_i, buddy_coords, stroke_j]) if i_min > j_min else np.concatenate([stroke_j, buddy_coords, stroke_i])
+    if i_min > j_min:
+        stroke_i, stroke_j = stroke_i[:i_min], stroke_j[j_max+1:]
+        return np.concat([stroke_i, buddy_coords, stroke_j])
+    else: 
+        stroke_i, stroke_j = stroke_i[i_max+1], stroke_j[:j_min]
+        return np.concat([stroke_j, buddy_coords, stroke_i])
