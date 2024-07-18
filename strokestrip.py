@@ -58,7 +58,48 @@ def fill_overlaps(stroke_i: np.ndarray, stroke_j: np.ndarray) -> np.ndarray:
             overlaps[used_i] = j
     
     return overlaps
+
+def check_violations(stroke_i, stroke_j, over_i, over_j, policy, result_violations):
+    violations, connection_angles, connection_dists = [], [], []
+    for i, point in enumerate(over_i):
+        if point != -1:
+            connection_angles.append(np.arccos(policy * tangent(stroke_i, i) @ tangent(stroke_j, point)))
+            connection_dists.append(np.linalg.norm(stroke_i[i] - stroke_j[point]))
+            if len(violations) > len(result_violations):
+                result_violations = violations
+                violations = []
+        else:
+            if i in over_j:
+                j = over_j.index(i)
+                connection_angles.append(np.arccos(policy * tangent(stroke_i, i) @ tangent(stroke_j, point)))
+                connection-dists.append(np.linalg.norm(stroke_i[i] - stroke_j[j]))
+            if len(violations) > len(result_violations):
+                result_violations = violations
+                violations = []
+                continue
+
+            # isoline stuff
+            neighbors = []
+            for other_i in range(i)[::-1]:
+                if overlaps[other_i] != -1:
+                    neighbors.append({'other_i': other_i, 'over': overlaps[other_i], 'diff': abs(i - other_i), 'dist': np.linalg.norm(stroke_i[other_i] - stroke_j[overlaps[other_i]])})
+                    break
+
+def evaluate_policy(over_i: np.ndarray, over_j: np.ndarray, stroke_i: np.ndarray, stroke_j: np.ndarray, policy: int):
+    # remove overlaps that don't work for this orientation
+    shortest = float('inf')
+    for i, point in enumerate(over_i):
+        if point == -1: continue
+        if policy * (tangent(stroke_i, i) @ tangent(stroke_j, point)) <= 0:
+            shortest = min(shortest, np.linalg.norm(stroke_i[i] - stroke_j[point]))
+            over_i[i] -= 1 
     
+    for j, point in enumerate(over_j):
+        if point == -1: continue
+        if policy * (tangent(stroke_j, j) @ tangent(stroke_i, point)) <= 0:
+            shortest = min(shortest, np.linalg.norm(stroke_j[j] - stroke_i[point]))
+            over_j[j] -= 1 
+
 def compatibility(stroke_i: np.ndarray, stroke_j: np.ndarray) -> float:
     """
     Find the pairwise orientation compatibility $o_{ij}$ as described in section 4.1 of Pagurek van Mossel et al. (2021).
@@ -80,6 +121,10 @@ def compatibility(stroke_i: np.ndarray, stroke_j: np.ndarray) -> float:
             if distance < endpoint_distance:
                 endpoint_distance, min_i, min_j = distance, i, j
     endpoint = endpoint_distance < 1e-1
+
+    # NOTE: not sure which of these is correct yet
+    # has_overlap = any(overlaps_i[0], overlaps_i[-1], overlaps_j[0], overlaps_j[-1]
+    has_overlap = -1 in overlaps_i + overlaps_j
 
 def find_stroke_orientations(vectors: np.ndarray) -> np.ndarray:
     """
