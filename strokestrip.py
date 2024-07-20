@@ -1,5 +1,5 @@
 import numpy as np
-import typing
+import typing, pyoptinterface
 
 def closest_ortho_idx_on_curve(stroke_i: np.ndarray, p_i: int, stroke_j: np.ndarray) -> int:
     """
