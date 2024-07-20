@@ -317,7 +317,20 @@ def find_stroke_orientations(vectors: np.ndarray) -> np.ndarray:
     Returns:
         `np.ndarray`: orientation information for the input strokes.
     """
-    pass 
+    model = pyoptinterface.highs.Model()
+    variables = [model.add_variable(lb=0, ub=1, domain=poi.VariableDomain.Binary, name=f"{i}") for (i, stroke) in enumerate(vectors)]
+
+    obj = 0
+    for i, stroke_i in enumerate(vectors):
+        for j, stroke_j in enumerate(vectors):
+            weight, orientation = compatibility(stroke_i, stroke_j) 
+            obj += weight * orientation * (variables[i] - variables[j]) * (variables[i] - variables[j])
+    
+    model.add_linear_constraint(variables[0], pyoptinterface.Eq, 1.0)
+    model.set_objective(obj, pyoptinterface.ObjectiveSense.Minimize)
+    model.optimize()
+
+    return np.array([(-1 if model.get_value(var) == 0 else 1) for var in variables])
 
 def flip_strokes(vectors: np.ndarray, orientations: np.ndarray) -> np.ndarray:
     """
