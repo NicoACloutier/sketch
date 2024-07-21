@@ -1,6 +1,32 @@
 import numpy as np
 import typing, pyoptinterface
 
+def tangent(stroke: np.ndarray, i: int) -> np.ndarray:
+    """
+    Find the vector tangent to a point in an array of points.
+    Arguments:
+        `stroke: np.ndarray`: the array of points to search through.
+        `i: int`: the index of the point to find the tangent of.
+    Returns:
+        `np.ndarray`: the tangent point.
+    """
+    return np.array([0, 0, 0]) if i == 0 else stroke[i] - stroke[i-1]
+
+def normal(stroke: np.ndarray) -> np.ndarray:
+    """
+    Give a three-dimensional vector normal to another.
+    Arguments:
+        `stroke: np.ndarray`: the vector to find a perpendicular vector to.
+    Returns:
+        `np.ndarray`: a perpendicular vector.
+    """
+    if v[1] == 0 and v[2] == 0:
+        if v[0] == 0:
+            raise ValueError('Zero vector.')
+        else:
+            return np.cross(v, [0, 1, 0])
+    return np.cross(v, [1, 0, 0]) 
+
 def closest_ortho_idx_on_curve(stroke_i: np.ndarray, p_i: int, stroke_j: np.ndarray) -> int:
     """
     Find the closest orthogonal index on a curve to a point on another curve.
