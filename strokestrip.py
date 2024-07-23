@@ -1,6 +1,18 @@
 import numpy as np
 import typing, pyoptinterface
 
+def intersections(stroke: np.ndarray, orthogonal_point: np.ndarray, orthogonal_vector: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Find the intersections a stroke has with a plane.
+    Arguments:
+        `stroke: np.ndarray`: the stroke to find intersectionso on.
+        `orthogonal_point: np.ndarray`: a point on the plane.
+        `orthogonal_vector: np.ndarray`: a vector orthogonal to the stroke at that point.
+    Arguments:
+        `np.ndarray`: the intersection points.
+        `np.ndarray`: the intersection indeces.         
+    """
+
 def tangent(stroke: np.ndarray, i: int) -> np.ndarray:
     """
     Find the vector tangent to a point in an array of points.
@@ -12,20 +24,15 @@ def tangent(stroke: np.ndarray, i: int) -> np.ndarray:
     """
     return np.array([0, 0, 0]) if i == 0 else stroke[i] - stroke[i-1]
 
-def normal(stroke: np.ndarray) -> np.ndarray:
+def normal(stroke: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
-    Give a three-dimensional vector normal to another.
+    Given a three-dimensional vector, find its orthogonal plane.
     Arguments:
-        `stroke: np.ndarray`: the vector to find a perpendicular vector to.
+        `stroke: np.ndarray`: the vector to find a perpendicular plane to.
     Returns:
-        `np.ndarray`: a perpendicular vector.
+        `np.ndarray`: a point on the plane.
+        `np.ndarrah`: the tangent vector on the plane.
     """
-    if v[1] == 0 and v[2] == 0:
-        if v[0] == 0:
-            raise ValueError('Zero vector.')
-        else:
-            return np.cross(v, [0, 1, 0])
-    return np.cross(v, [1, 0, 0]) 
 
 def closest_ortho_idx_on_curve(stroke_i: np.ndarray, p_i: int, stroke_j: np.ndarray) -> int:
     """
@@ -38,10 +45,8 @@ def closest_ortho_idx_on_curve(stroke_i: np.ndarray, p_i: int, stroke_j: np.ndar
         `int`: the index of the closest point on the second curve.
     """
     origin = stroke_i[p_i]
-    ortho = normal(tangent(stroke_i, p_i))
-    p1 = origin - 100 * ortho
-    p2 = origin + 100 * ortho
-    ints, indeces = intersections(stroke_j, p1, p2)
+    orthogonal_point, orthogonal_vector = normal(tangent(stroke_i, p_i))
+    ints, indeces = intersections(stroke_j, orthogonal_point, orthogonal_vector)
     return -1 if ints.empty() else indeces[np.argmin(np.linalg.norm(ints - origin, axis=1))]
 
 def weight_for_angle(angle: float) -> float:
