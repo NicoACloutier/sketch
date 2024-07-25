@@ -1,17 +1,35 @@
 import numpy as np
 import typing, pyoptinterface
 
-def intersections(stroke: np.ndarray, orthogonal_point: np.ndarray, orthogonal_vector: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+PI_HALVES = np.pi / 2
+
+def intersections(stroke: np.ndarray, orthogonal_point: np.ndarray, orthogonal_vector: np.ndarray) -> np.ndarray:
     """
     Find the intersections a stroke has with a plane.
     Arguments:
         `stroke: np.ndarray`: the stroke to find intersectionso on.
-        `orthogonal_point: np.ndarray`: a point on the plane.
-        `orthogonal_vector: np.ndarray`: a vector orthogonal to the stroke at that point.
+        `orthogonal_point: np.ndarray`: the point to test on.
+        `orthogonal_vector: np.ndarray`: the tangent vector to test for orthogonality.
     Arguments:
         `np.ndarray`: the intersection points.
-        `np.ndarray`: the intersection indeces.         
     """
+    # center points on the origin
+    centered_tangent = orthogonal_vector - orthogonal_point
+    stroke = stroke - orthogonal_point
+    
+    intersects = []
+    prev_angle = np.arccos(stroke[0] @ centered_tangent)
+    for i, point in enumerate(stroke[:-1]):
+        next_point = stroke[i+1]
+        next_angle = np.arccos(next_point @ centered_tangent)
+        if next_angle == PI_HALVES:
+            intersects.append(next_point)
+        elif next_angle < PI_HALVES and prev_angle > PI_HALVES:
+            intersects.append((next_point + prev_point) / 2)
+        elif next_angle > PI_HALVES and prev_angle < PI_HALVES:
+            intersects.append((next_point + prev_point) / 2)
+
+    return np.array(intersects)
 
 def tangent(stroke: np.ndarray, i: int) -> np.ndarray:
     """
@@ -24,16 +42,6 @@ def tangent(stroke: np.ndarray, i: int) -> np.ndarray:
     """
     return np.array([0, 0, 0]) if i == 0 else stroke[i] - stroke[i-1]
 
-def normal(stroke: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Given a three-dimensional vector, find its orthogonal plane.
-    Arguments:
-        `stroke: np.ndarray`: the vector to find a perpendicular plane to.
-    Returns:
-        `np.ndarray`: a point on the plane.
-        `np.ndarrah`: the tangent vector on the plane.
-    """
-
 def closest_ortho_idx_on_curve(stroke_i: np.ndarray, p_i: int, stroke_j: np.ndarray) -> int:
     """
     Find the closest orthogonal index on a curve to a point on another curve.
@@ -45,8 +53,7 @@ def closest_ortho_idx_on_curve(stroke_i: np.ndarray, p_i: int, stroke_j: np.ndar
         `int`: the index of the closest point on the second curve.
     """
     origin = stroke_i[p_i]
-    orthogonal_point, orthogonal_vector = normal(tangent(stroke_i, p_i))
-    ints, indeces = intersections(stroke_j, orthogonal_point, orthogonal_vector)
+    ints = intersections(stroke_j, stroke_i, tangent(stroke_i, p_i))
     return -1 if ints.empty() else indeces[np.argmin(np.linalg.norm(ints - origin, axis=1))]
 
 def weight_for_angle(angle: float) -> float:
