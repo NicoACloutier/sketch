@@ -1,9 +1,11 @@
 import numpy as np
 import typing, pyoptinterface
+from pyoptinterface import highs
 
 PI_HALVES = np.pi / 2
+MAX_VIOLATIONS = 10
 
-def intersections(stroke: np.ndarray, orthogonal_point: np.ndarray, orthogonal_vector: np.ndarray) -> np.ndarray:
+def intersections(stroke: np.ndarray, orthogonal_point: np.ndarray, orthogonal_vector: np.ndarray) -> tuple[np.ndarray, list[int]]:
     """
     Find the intersections a stroke has with a plane.
     Arguments:
@@ -12,24 +14,40 @@ def intersections(stroke: np.ndarray, orthogonal_point: np.ndarray, orthogonal_v
         `orthogonal_vector: np.ndarray`: the tangent vector to test for orthogonality.
     Arguments:
         `np.ndarray`: the intersection points.
+        `list[int]`: the indeces of the intersection points.
     """
     # center points on the origin
     centered_tangent = orthogonal_vector - orthogonal_point
     stroke = stroke - orthogonal_point
     
-    intersects = []
+    intersects, indeces = [], []
     prev_angle = np.arccos(stroke[0] @ centered_tangent)
+    if prev_angle == PI_HALVES:
+        intersects.append(stroke[0])
+        indeces.append(0)
     for i, point in enumerate(stroke[:-1]):
         next_point = stroke[i+1]
         next_angle = np.arccos(next_point @ centered_tangent)
         if next_angle == PI_HALVES:
             intersects.append(next_point)
+            indeces.append(i+1)
         elif next_angle < PI_HALVES and prev_angle > PI_HALVES:
-            intersects.append((next_point + prev_point) / 2)
+            if abs(next_angle - PI_HALVES) <= abs(prev_angle - PI_HALVES):
+                intersects.append(next_point)
+                indeces.append(i+1)
+            else:
+                intersects.append(point)
+                indeces.append(i)
         elif next_angle > PI_HALVES and prev_angle < PI_HALVES:
-            intersects.append((next_point + prev_point) / 2)
+            if abs(next_angle - PI_HALVES) <= abs(prev_angle - PI_HALVES):
+                intersects.append(next_point)
+                indeces.append(i+1)
+            else:
+                intersects.append(point)
+                indeces.append(i)
+        prev_angle = next_angle
 
-    return np.array(intersects)
+    return np.array(intersects), indeces
 
 def tangent(stroke: np.ndarray, i: int) -> np.ndarray:
     """
@@ -53,8 +71,8 @@ def closest_ortho_idx_on_curve(stroke_i: np.ndarray, p_i: int, stroke_j: np.ndar
         `int`: the index of the closest point on the second curve.
     """
     origin = stroke_i[p_i]
-    ints = intersections(stroke_j, stroke_i, tangent(stroke_i, p_i))
-    return -1 if ints.empty() else indeces[np.argmin(np.linalg.norm(ints - origin, axis=1))]
+    ints, indeces = intersections(stroke_j, origin, tangent(stroke_i, p_i))
+    return -1 if ints.size == 0 else indeces[np.argmin(np.linalg.norm(ints, axis=1))]
 
 def weight_for_angle(angle: float) -> float:
     """
@@ -69,16 +87,16 @@ def weight_for_angle(angle: float) -> float:
     if deg < low: return 1
     return np.exp(-(deg - low)**2 / (2*sigma**2)) if deg < high else 0
 
-def compare_neighbors(n_i: dict[str, typing.Any], n_j: dict[str, typing.Any]) -> bool:
+def compare_neighbors(p: dict[str, typing.Union[int, np.int64, np.float64]]) -> tuple[np.int64, np.float64]:
     """
     Compare neighboring points to see which is larger.
     Arguments:
-        `n_i: dict[str, typing.Any]`: the first point to compare.
-        `n_j: dict[str, typing.Any]`: the second point to compare.
+        `p: dict[str, typing.Any]`: the first point to compare.
     Returns:
-        `bool`: `True` if `n_i` is larger, `False` otherwise.
+        `np.int64`: the most important piece of comparison, the integer difference.
+        `np.float64`: the tiebraker, the floating point difference.
     """
-    return n_i['diff'] < n_j['diff'] if n_i['diff'] != n_j['diff'] else n_i['dist'] < n_j['dist']
+    return p['diff'], p['dist']
 
 def fill_overlaps(stroke_i: np.ndarray, stroke_j: np.ndarray) -> np.ndarray:
     """
@@ -91,7 +109,7 @@ def fill_overlaps(stroke_i: np.ndarray, stroke_j: np.ndarray) -> np.ndarray:
     """
     overlaps = np.full(stroke_i.shape[0], -1)
     for i, point in enumerate(stroke_i):
-        j = closest_ortho_idx_on_curve(stroke_i, point, stroke_j) 
+        j = closest_ortho_idx_on_curve(stroke_i, i, stroke_j) 
         if j == -1: continue
         
         vec1 = point - stroke_j[j]
@@ -101,7 +119,7 @@ def fill_overlaps(stroke_i: np.ndarray, stroke_j: np.ndarray) -> np.ndarray:
         if dist1 > 5e-1:
             line1_i = point + 1e-1*vec1
             line2_i = stroke_j[j] - 1e-1*vec1
-            if not intersections(stroke_i, line1_i, line2_i)[0].empty():
+            if not intersections(stroke_j, point, tangent(stroke_j, j))[0].size == 0:
                 vec1_ok = False
         
         k = closest_ortho_idx_on_curve(stroke_j, j, stroke_i)
@@ -116,7 +134,7 @@ def fill_overlaps(stroke_i: np.ndarray, stroke_j: np.ndarray) -> np.ndarray:
             if dist2 > 5e-1:
                 line1_j = stroke_i[k] + 1e-1*vec1
                 line2_j = stroke_j[j] - 1e-1*vec1
-                if not intersections(stroke_j, line1_j, line2_j)[0].empty():
+                if not intersections(stroke_i, stroke_j[j], tangent(stroke_i, i))[0].size == 0:
                     vec2_ok = False
 
         if not vec1_ok and not vec2_ok: continue
@@ -155,9 +173,9 @@ def check_violations(stroke_i: np.ndarray, stroke_j: np.ndarray, over_i: np.ndar
                 violations = []
         else:
             if i in over_j:
-                j = over_j.index(i)
+                j, = np.where(over_j == i)
                 connection_angles.append(np.arccos(policy * tangent(stroke_i, i) @ tangent(stroke_j, point)))
-                connection-dists.append(np.linalg.norm(stroke_i[i] - stroke_j[j]))
+                connection_dists.append(np.linalg.norm(stroke_i[i] - stroke_j[j]))
             if len(violations) > len(result_violations):
                 result_violations = violations
                 violations = []
@@ -166,8 +184,8 @@ def check_violations(stroke_i: np.ndarray, stroke_j: np.ndarray, over_i: np.ndar
             # left neighbor
             neighbors = []
             for other_i in range(i)[::-1]:
-                if overlaps[other_i] != -1:
-                    neighbors.append({'other_i': other_i, 'over': overlaps[other_i], 'diff': abs(i - other_i), 'dist': np.linalg.norm(stroke_i[other_i] - stroke_j[overlaps[other_i]])})
+                if over_i[other_i] != -1:
+                    neighbors.append({'other_i': other_i, 'over': over_i[other_i], 'diff': abs(i - other_i), 'dist': np.linalg.norm(stroke_i[other_i] - stroke_j[over_i[other_i]])})
                     break
 
             # right neighbor
@@ -178,16 +196,16 @@ def check_violations(stroke_i: np.ndarray, stroke_j: np.ndarray, over_i: np.ndar
             # other neighbor
             closest_j_left = -1
             closest_j_right = -1
-            for other_j, over in enumerate(over_j):
+            for j, over in enumerate(over_j):
                 if over == -1: continue
                 if over < i and (closest_j_left == -1 or over > over_j[closest_j_left]): closest_j_left = j
                 if over > i and (closest_j_right) == -1 or over < over_j[closest_j_right]: closest_j_right = j
 
             if closest_j_left != -1:
-                neighbors.append({'other_i': over_j[closest_j_left], 'over': closest_j_left, 'diff': abs(i - over_j[closest_j_left], 'dist': np.linalg.norm(stroke_i[over_j[closest_j_left]] - stroke_j[closest_j_left]))})
+                neighbors.append({'other_i': over_j[closest_j_left], 'over': closest_j_left, 'diff': abs(i - over_j[closest_j_left]), 'dist': np.linalg.norm(stroke_i[over_j[closest_j_left]] - stroke_j[closest_j_left])})
             
             if closest_j_right != -1:
-                neighbors.append({'other_i': over_j[closest_j_right], 'over': closest_j_right, 'diff': abs(i - over_j[closest_j_right], 'dist': np.linalg.norm(stroke_i[over_j[closest_j_right]] - stroke_j[closest_j_right]))})
+                neighbors.append({'other_i': over_j[closest_j_right], 'over': closest_j_right, 'diff': abs(i - over_j[closest_j_right]), 'dist': np.linalg.norm(stroke_i[over_j[closest_j_right]] - stroke_j[closest_j_right])})
     
             if len(neighbors) == 0: continue
             neighbor = min(neighbors, key=compare_neighbors)
@@ -238,8 +256,8 @@ def evaluate_policy(over_i: np.ndarray, over_j: np.ndarray, stroke_i: np.ndarray
             shortest = min(shortest, np.linalg.norm(stroke_j[j] - stroke_i[point]))
             over_j[j] -= 1
 
-    viol_i, angles_i, dists_i = check_violations(stroke_i, stroke_j, over_i, over_j)
-    viol_j, angles_j, dists_j = check_violations(stroke_j, stroke_i, over_j, over_i)
+    viol_i, angles_i, dists_i = check_violations(stroke_i, stroke_j, over_i, over_j, policy)
+    viol_j, angles_j, dists_j = check_violations(stroke_j, stroke_i, over_j, over_i, policy)
     return {'violations': viol_i + viol_j, 'angles': angles_i + angles_j, 'dists': dists_i + dists_j, 'shortest': shortest} 
 
 def compatibility(stroke_i: np.ndarray, stroke_j: np.ndarray) -> tuple[float, float]:
@@ -268,7 +286,8 @@ def compatibility(stroke_i: np.ndarray, stroke_j: np.ndarray) -> tuple[float, fl
     # NOTE: not sure which of these is correct yet
     # has_overlap = any(overlaps_i[0], overlaps_i[-1], overlaps_j[0], overlaps_j[-1]
     has_overlap = -1 in overlaps_i + overlaps_j
-
+    policy_result = dict()
+    
     if has_overlap:
         policy_fwd = evaluate_policy(overlaps_i, overlaps_j, stroke_i, stroke_j, 1)
         policy_rev = evaluate_policy(overlaps_i, overlaps_j, stroke_i, stroke_j, -1)
@@ -313,7 +332,7 @@ def compatibility(stroke_i: np.ndarray, stroke_j: np.ndarray) -> tuple[float, fl
                 continuation = True
                 policy_result['violations'] = []
                 policy_result['angles'] = [endpoint_angle]
-                policy_result['dists'] = [endpoint_dist]
+                policy_result['dists'] = [endpoint_distance]
                 result['weight'] = 1e-2 if has_overlap else 1
             else:
                 orig_angle_ok = endpoint_angle / np.pi * 180 < 180 - 40
@@ -323,7 +342,7 @@ def compatibility(stroke_i: np.ndarray, stroke_j: np.ndarray) -> tuple[float, fl
                     continuation = True
                     policy_result['violations'] = []
                     policy_result['angles'] = [endpoint_angle]
-                    policy_result['dists'] = [endpoint_dist]
+                    policy_result['dists'] = [endpoint_distance]
                     result['weight'] = 0.8 if orig_angle_good else 0.1
     
     if not continuation:
@@ -355,8 +374,8 @@ def find_stroke_orientations(vectors: np.ndarray) -> np.ndarray:
     Returns:
         `np.ndarray`: orientation information for the input strokes.
     """
-    model = pyoptinterface.highs.Model()
-    variables = [model.add_variable(lb=0, ub=1, domain=poi.VariableDomain.Binary, name=f"{i}") for (i, stroke) in enumerate(vectors)]
+    model = highs.Model()
+    variables = [model.add_variable(lb=0, ub=1, domain=pyoptinterface.VariableDomain.Binary, name=f"{i}") for (i, stroke) in enumerate(vectors)]
 
     obj = 0
     for i, stroke_i in enumerate(vectors):
