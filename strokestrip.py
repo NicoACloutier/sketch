@@ -1,6 +1,7 @@
 import numpy as np
-import typing, pyoptinterface
-from pyoptinterface import highs
+import typing
+import gurobipy as gp
+from gurobipy import GRB
 
 PI_HALVES = np.pi / 2
 MAX_VIOLATIONS = 10
@@ -374,8 +375,8 @@ def find_stroke_orientations(vectors: np.ndarray) -> np.ndarray:
     Returns:
         `np.ndarray`: orientation information for the input strokes.
     """
-    model = highs.Model()
-    variables = [model.add_variable(lb=0, ub=1, domain=pyoptinterface.VariableDomain.Binary, name=f"{i}") for (i, stroke) in enumerate(vectors)]
+    model = gp.Model("model")
+    variables = [model.addVar(lb=0, ub=1, vtype=GRB.BINARY, name=f"v{i}") for (i, stroke) in enumerate(vectors)]
 
     obj = 0
     for i, stroke_i in enumerate(vectors):
@@ -383,11 +384,11 @@ def find_stroke_orientations(vectors: np.ndarray) -> np.ndarray:
             weight, orientation = compatibility(stroke_i, stroke_j) 
             obj += weight * orientation * (variables[i] - variables[j]) * (variables[i] - variables[j])
     
-    model.add_linear_constraint(variables[0], pyoptinterface.Eq, 1.0)
-    model.set_objective(obj, pyoptinterface.ObjectiveSense.Minimize)
+    model.addConstr(variables[0] == 1.0, "c0")
+    model.setObjective(obj, GRB.MINIMIZE)
     model.optimize()
 
-    return np.array([(-1 if model.get_value(var) == 0 else 1) for var in variables])
+    return np.array([(-1 if var.X == 0 else 1) for var in model.getVars()])
 
 def flip_strokes(vectors: np.ndarray, orientations: np.ndarray) -> np.ndarray:
     """
