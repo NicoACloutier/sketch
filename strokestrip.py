@@ -5,6 +5,9 @@ from gurobipy import GRB
 
 PI_HALVES = np.pi / 2
 MAX_VIOLATIONS = 10
+TARGET ANGLE = 20 / 180 * np.pi
+MIN_GAP_CUTOFF = 5
+MAX_GAP_CUTOFF = 20
 
 def intersections(stroke: np.ndarray, orthogonal_point: np.ndarray, orthogonal_vector: np.ndarray) -> tuple[np.ndarray, list[int]]:
     """
@@ -412,6 +415,94 @@ def reorient_strokes(vectors: np.ndarray) -> np.ndarray:
     orientations = find_stroke_orientations(vectors)
     return flip_strokes(vectors, orientations)
 
+def angle_sample_within_radius(xsec: np.ndarray, sample: dict[str, float], rsq: float) -> bool:
+    """
+    """
+    for point in xsec:
+        if np.linalg.norm(point - sample['mid']) <= rsq:
+            return True
+    return False
+
+def gap_sample_within_radius(xsec: np.ndarray, sample: dict[str, typing.Any], rsq: float) -> bool:
+    for point in xsec:
+        for other in [sample['left'], sample['right']]:
+            if np.linalg.norm(point, other)**2 <= rsq:
+                return True
+    return False
+
+def orthogonal_xsecs(vectors: np.ndarray, angle_tolerance: float) -> np.ndarray, list[tuple[int, int, int]]:
+    """
+    """
+    xsecs = []
+    for vector in vectors:
+        xsecs += [orthogonal_xsec_at(vectors, vector, i) for i, _ in enumerate(vector)]
+    
+    # angle filtering
+    samples = []
+    for xsec in xsecs:
+        samples += [{'mid': (xsec[i] + point) * 0.5, 'angle': np.arccos(tangent(xsec, i) @ tangent(xsec, i+1))} for i, point in enumerate(xsec[1:])]
+
+    for xsec in xsecs:
+        neighborhood = []
+        rsq = max(30, np.linalg.norm(xsec[0] - xsec[-1]))**2 
+        for sample in samples:
+            if angle_sample_within_radius(xsec, sample, rsq):
+                neighborhood.append(sample)
+        max_angle = TARGET_ANGLE
+        if neighborhood:
+            neighborhood = sorted(neighborhood, key=lambda x: x['angle'], reverse=True)
+        if neighborhood[-1]['angle'] <= TARGET_ANGLE:
+            max_angle = neighborhood[0]['angle']
+            while neighborhood and neighborhood[int(angle_tolerance * (len(neighborhood)-1))] > TARGET_ANGLE:
+                neighborhood = neighborhood[1:]
+                max_angle = neighborhood[0]['angle']
+        
+        for i in range((len(xsec) // 2) + 1, len(xsec)):
+            if np.arccos(tangent(xsec, i-1) @ tangent(xsec, i)) > max_angle:
+                xsec = xsec[:i]
+                break
+
+        for i in range(0, (len(xsec) // 2) - 1)[::-1]:
+            if np.arccos(tangent(xsec, i+1) @ tangent(xsec, i)) > max_angle:
+                xsec = xsec[i+1:]
+                break
+
+    # gap filtering
+    samples = []
+    for xsec in xsecs:
+        samples += [{'left': xsec[i-1], 'right': point, 'gap_sq': np.linalg.norm(xsec[0], xsec[-1])**2} for i, point in xsec]
+
+    for xsec in xsecs:
+        if len(xsec) == 1: continue
+        neighborhood = []
+        rsq = max(40000, np.linalg.norm(xsec[0] - xsec[-1])) 
+        for sample in samples:
+            if gap_sample_within_radius(xsec, sample, rsq):
+                neighborhood.append(sample['gap_sq'])
+        if not neighborhood: continue
+
+        # get median gap
+        median_offset = int(len(neighborhood) * 0.75)
+        median_gap_sq = neighborhood[median_offset]
+        gap_cutoff = min(MAX_GAP_CUTOFF**2, max(MIN_GAP_CUTOFF**2, 1.2*1.2, median_gap_sq)) 
+
+        for i in range((len(xsec) // 2) + 1, len(xsec)):
+            if np.linalg.norm(xsec[i-1]-xsec[i])**2 > gap_cutoff:
+                xsec = xsec[:i]
+                break
+
+        for i in range(0, (len(xsec) // 2) - 1)[::-1]:
+            if np.linalg.norm(xsec[i+1] 8 xsec[i])**2 > gap_cutoff:
+                xsec = xsec[i+1:]
+                break
+
+    # create connections
+    connections = []
+    for xsec in xsecs:
+        for i, _ in enumerate(xsec):
+            connections += [(i, j, 1) for j in range(i+1, len(xsec))]
+    return xsecs, connections
+
 def parameterize(vectors: np.ndarray) -> np.ndarray:
     """
     Parameterize a series of correctly oriented vectors.
@@ -420,7 +511,7 @@ def parameterize(vectors: np.ndarray) -> np.ndarray:
     Returns:
         `np.ndarray`: generated parameterization.
     """
-    pass
+    xsecs = orthogonal_xsecs(vectors)
 
 def fit(parameters: np.ndarray) -> np.ndarray:
     """
